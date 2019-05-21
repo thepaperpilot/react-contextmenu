@@ -14,10 +14,14 @@ export default class ContextMenuTrigger extends Component {
         collect: PropTypes.func,
         disable: PropTypes.bool,
         holdToDisplay: PropTypes.number,
+        posX: PropTypes.number,
+        posY: PropTypes.number,
         renderTag: PropTypes.oneOfType([
             PropTypes.node,
             PropTypes.func
-        ])
+        ]),
+        mouseButton: PropTypes.number,
+        disableIfShiftIsPressed: PropTypes.bool
     };
 
     static defaultProps = {
@@ -25,7 +29,11 @@ export default class ContextMenuTrigger extends Component {
         collect() { return null; },
         disable: false,
         holdToDisplay: 1000,
-        renderTag: 'div'
+        renderTag: 'div',
+        posX: 0,
+        posY: 0,
+        mouseButton: 2, // 0 is left click, 2 is right click
+        disableIfShiftIsPressed: false
     };
 
     touchHandled = false;
@@ -84,18 +92,35 @@ export default class ContextMenuTrigger extends Component {
     }
 
     handleContextMenu = (event) => {
-        this.handleContextClick(event);
+        if (event.button === this.props.mouseButton) {
+            this.handleContextClick(event);
+        }
         callIfExists(this.props.attributes.onContextMenu, event);
+    }
+
+    handleMouseClick = (event) => {
+        if (event.button === this.props.mouseButton) {
+            this.handleContextClick(event);
+        }
+        callIfExists(this.props.attributes.onClick, event);
     }
 
     handleContextClick = (event) => {
         if (this.props.disable) return;
+        if (this.props.disableIfShiftIsPressed && event.shiftKey) return;
 
         event.preventDefault();
         event.stopPropagation();
 
-        const x = event.clientX || (event.touches && event.touches[0].pageX);
-        const y = event.clientY || (event.touches && event.touches[0].pageY);
+        let x = event.clientX || (event.touches && event.touches[0].pageX);
+        let y = event.clientY || (event.touches && event.touches[0].pageY);
+
+        if (this.props.posX) {
+            x -= this.props.posX;
+        }
+        if (this.props.posY) {
+            y -= this.props.posY;
+        }
 
         hideMenu();
 
@@ -103,16 +128,20 @@ export default class ContextMenuTrigger extends Component {
         let showMenuConfig = {
             position: { x, y },
             target: this.elem,
-            id: this.props.id,
-            data
+            id: this.props.id
         };
         if (data && (typeof data.then === 'function')) {
             // it's promise
             data.then((resp) => {
-                showMenuConfig.data = resp;
+                showMenuConfig.data = assign({}, resp, {
+                    target: event.target
+                });
                 showMenu(showMenuConfig);
             });
         } else {
+            showMenuConfig.data = assign({}, data, {
+                target: event.target
+            });
             showMenu(showMenuConfig);
         }
     }
@@ -126,6 +155,7 @@ export default class ContextMenuTrigger extends Component {
         const newAttrs = assign({}, attributes, {
             className: cx(cssClasses.menuWrapper, attributes.className),
             onContextMenu: this.handleContextMenu,
+            onClick: this.handleMouseClick,
             onMouseDown: this.handleMouseDown,
             onMouseUp: this.handleMouseUp,
             onTouchStart: this.handleTouchstart,
